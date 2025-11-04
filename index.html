@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Аналіз графа та код Прюфера</title>
+<style>
+  body { font-family: Arial; margin: 24px; background:#f5f7fa; color:#222; }
+  h2, h3 { color:#0a58ca; }
+  textarea { width:100%; height:120px; font-family: monospace; font-size:14px; padding:8px; border-radius:6px; }
+  button { background:#0a58ca; color:white; padding:10px 16px; border-radius:8px; border:none; cursor:pointer; margin-top:8px; }
+  button:hover { background:#084298; }
+  pre { background:white; padding:12px; border-radius:8px; min-height:100px; }
+  canvas { background:white; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.15); margin-top:10px; }
+  #container { display:flex; flex-wrap:wrap; gap:30px; }
+  #left, #right { flex:1 1 450px; }
+</style>
+</head>
+<body>
+
+<h2>🔹 Аналіз графа за матрицею суміжності</h2>
+
+<div id="container">
+  <div id="left">
+    <p>Введіть матрицю суміжності:</p>
+    <textarea id="matrixInput">0 1 1 0
+1 0 1 1
+1 1 0 1
+0 1 1 0</textarea><br>
+    <button id="runBtn">Побудувати граф</button>
+    <h3>Результат:</h3>
+    <pre id="output"></pre>
+  </div>
+
+  <div id="right">
+    <canvas id="graphCanvas" width="600" height="400"></canvas>
+  </div>
+</div>
+
+<hr style="margin:40px 0;">
+
+<h2>🌲 Побудова дерева за кодом Прюфера</h2>
+
+<p>Введіть код Прюфера (числа через пробіл):</p>
+<textarea id="pruferInput">1 1 2 3</textarea><br>
+<button id="pruferBtn">Побудувати дерево</button>
+<pre id="pruferOut"></pre>
+<canvas id="pruferCanvas" width="600" height="400"></canvas>
+
+<script>
+// === Аналіз графа ===
+function parseMatrix(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length>0);
+  const matrix = lines.map(line => line.split(/\s+/).map(Number));
+  const n = matrix.length;
+  for (const row of matrix) {
+    if (row.length !== n) throw new Error("Матриця має бути квадратною!");
+    for (const x of row) if (![0,1].includes(x)) throw new Error("Дозволені тільки 0 або 1!");
+  }
+  return matrix;
+}
+
+function drawGraph(matrix, canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const n = matrix.length;
+  const R = Math.min(W,H)/2 - 60;
+  const cx = W/2, cy = H/2;
+  const coords = [];
+  for (let i=0;i<n;i++){
+    const a = 2*Math.PI*i/n - Math.PI/2;
+    coords.push({x:cx+R*Math.cos(a), y:cy+R*Math.sin(a)});
+  }
+
+  // ребра
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#555";
+  for (let i=0;i<n;i++){
+    for (let j=i+1;j<n;j++){
+      if (matrix[i][j]===1){
+        ctx.beginPath();
+        ctx.moveTo(coords[i].x, coords[i].y);
+        ctx.lineTo(coords[j].x, coords[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // вершини
+  for (let i=0;i<n;i++){
+    const {x,y} = coords[i];
+    ctx.beginPath();
+    ctx.arc(x,y,18,0,2*Math.PI);
+    ctx.fillStyle = "#0d6efd";
+    ctx.fill();
+    ctx.strokeStyle = "#003366";
+    ctx.stroke();
+    ctx.fillStyle = "white";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(i+1,x,y);
+  }
+}
+
+function analyze(matrix){
+  const n = matrix.length;
+  let res = `Кількість вершин: ${n}\n`;
+  for (let i=0;i<n;i++){
+    const neigh = [];
+    for (let j=0;j<n;j++) if (matrix[i][j]===1) neigh.push(j+1);
+    res += `v${i+1}: околиця {${neigh.join(", ")}} — степінь = ${neigh.length}\n`;
+  }
+  return res;
+}
+
+document.getElementById('runBtn').addEventListener('click', ()=>{
+  const txt = document.getElementById('matrixInput').value;
+  const out = document.getElementById('output');
+  try {
+    const M = parseMatrix(txt);
+    out.textContent = analyze(M);
+    drawGraph(M, 'graphCanvas');
+  } catch(e){
+    out.textContent = "⚠️ Помилка: " + e.message;
+  }
+});
+
+// === Код Прюфера ===
+function pruferToEdges(code) {
+  const prufer = code.map(Number);
+  const n = prufer.length + 2;
+  const degree = Array(n+1).fill(1);
+  for (const v of prufer) degree[v]++;
+  const edges = [];
+  for (const v of prufer) {
+    for (let i=1;i<=n;i++){
+      if (degree[i]===1){
+        edges.push([i,v]);
+        degree[i]--; degree[v]--;
+        break;
+      }
+    }
+  }
+  const remaining = [];
+  for (let i=1;i<=n;i++) if (degree[i]===1) remaining.push(i);
+  edges.push(remaining);
+  return edges;
+}
+
+function drawTree(edges, canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const n = new Set(edges.flat()).size;
+  const cx = canvas.width/2, cy = canvas.height/2;
+  const R = Math.min(canvas.width,canvas.height)/2 - 60;
+  const coords = [];
+  for (let i=0;i<n;i++){
+    const a = 2*Math.PI*i/n - Math.PI/2;
+    coords.push({x:cx+R*Math.cos(a), y:cy+R*Math.sin(a)});
+  }
+
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#444";
+  edges.forEach(([u,v])=>{
+    ctx.beginPath();
+    ctx.moveTo(coords[u-1].x, coords[u-1].y);
+    ctx.lineTo(coords[v-1].x, coords[v-1].y);
+    ctx.stroke();
+  });
+
+  for (let i=0;i<n;i++){
+    const {x,y} = coords[i];
+    ctx.beginPath();
+    ctx.arc(x,y,18,0,2*Math.PI);
+    ctx.fillStyle = "#198754";
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "white";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(i+1, x, y);
+  }
+}
+
+document.getElementById('pruferBtn').addEventListener('click', ()=>{
+  const txt = document.getElementById('pruferInput').value.trim();
+  const out = document.getElementById('pruferOut');
+  try {
+    const code = txt.split(/\s+/).map(Number).filter(x=>!isNaN(x));
+    const edges = pruferToEdges(code);
+    out.textContent = "Отримані ребра: " + edges.map(e=>`(${e[0]}-${e[1]})`).join(", ");
+    drawTree(edges, 'pruferCanvas');
+  } catch(e){
+    out.textContent = "⚠️ Помилка: " + e.message;
+  }
+});
+</script>
+
+</body>
+</html>
