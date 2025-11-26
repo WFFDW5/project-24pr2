@@ -17,15 +17,23 @@
 </head>
 <body>
 
-<h2>🔹 Аналіз графа за матрицею суміжності</h2>
+<h2>Аналіз графа за матрицею суміжності</h2>
 
 <div id="container">
   <div id="left">
     <p>Введіть матрицю суміжності:</p>
+
+    <p>
+      Тип графа:
+      <label><input type="radio" name="gtype" value="undirected" checked> Неорієнтований</label>
+      <label style="margin-left:20px;"><input type="radio" name="gtype" value="directed"> Орієнтований</label>
+    </p>
+
     <textarea id="matrixInput">0 1 1 0
 1 0 1 1
 1 1 0 1
 0 1 1 0</textarea><br>
+
     <button id="runBtn">Побудувати граф</button>
     <h3>Результат:</h3>
     <pre id="output"></pre>
@@ -38,57 +46,103 @@
 
 <hr style="margin:40px 0;">
 
-<h2>🌲 Побудова дерева за кодом Прюфера</h2>
+<h2>Побудова дерева за кодом Прюфера</h2>
 
 <p>Введіть код Прюфера (числа через пробіл):</p>
 <textarea id="pruferInput">1 1 2 3</textarea><br>
+
 <button id="pruferBtn">Побудувати дерево</button>
 <pre id="pruferOut"></pre>
+
 <canvas id="pruferCanvas" width="600" height="400"></canvas>
 
 <script>
 // === Аналіз графа ===
-function parseMatrix(text) {
+function parseMatrix(text, graphType) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length>0);
   const matrix = lines.map(line => line.split(/\s+/).map(Number));
   const n = matrix.length;
+
+  // Перевірка на квадратність
   for (const row of matrix) {
     if (row.length !== n) throw new Error("Матриця має бути квадратною!");
-    for (const x of row) if (![0,1].includes(x)) throw new Error("Дозволені тільки 0 або 1!");
+    for (const x of row) {
+      if (![0,1].includes(x)) throw new Error("Дозволені тільки 0 або 1!");
+    }
   }
+
+  // Якщо граф неорієнтований — додати перевірку симетрії
+  if (graphType === "undirected") {
+    for (let i=0;i<n;i++){
+      for (let j=0;j<n;j++){
+        if (matrix[i][j] !== matrix[j][i]) {
+          throw new Error("Для неорієнтованого графа матриця має бути симетричною!");
+        }
+      }
+    }
+  }
+
   return matrix;
 }
 
-function drawGraph(matrix, canvasId) {
+function drawGraph(matrix, canvasId, graphType) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
+
   ctx.clearRect(0,0,W,H);
 
   const n = matrix.length;
   const R = Math.min(W,H)/2 - 60;
   const cx = W/2, cy = H/2;
+
   const coords = [];
   for (let i=0;i<n;i++){
     const a = 2*Math.PI*i/n - Math.PI/2;
     coords.push({x:cx+R*Math.cos(a), y:cy+R*Math.sin(a)});
   }
 
-  // ребра
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#555";
+
+  // --- Малювання ребер ---
   for (let i=0;i<n;i++){
-    for (let j=i+1;j<n;j++){
-      if (matrix[i][j]===1){
+    for (let j=0;j<n;j++){
+      if (matrix[i][j] === 1) {
+
+        const A = coords[i];
+        const B = coords[j];
+
+        // Лінія
         ctx.beginPath();
-        ctx.moveTo(coords[i].x, coords[i].y);
-        ctx.lineTo(coords[j].x, coords[j].y);
+        ctx.moveTo(A.x, A.y);
+        ctx.lineTo(B.x, B.y);
         ctx.stroke();
+
+        // Стрілки тільки для орієнтованого графа
+        if (graphType === "directed") {
+          const angle = Math.atan2(B.y - A.y, B.x - A.x);
+          const arrowLen = 12;
+
+          ctx.beginPath();
+          ctx.moveTo(B.x, B.y);
+          ctx.lineTo(
+            B.x - arrowLen * Math.cos(angle - Math.PI/6),
+            B.y - arrowLen * Math.sin(angle - Math.PI/6)
+          );
+          ctx.lineTo(
+            B.x - arrowLen * Math.cos(angle + Math.PI/6),
+            B.y - arrowLen * Math.sin(angle + Math.PI/6)
+          );
+          ctx.closePath();
+          ctx.fillStyle = "#555";
+          ctx.fill();
+        }
       }
     }
   }
 
-  // вершини
+  // --- Вершини ---
   for (let i=0;i<n;i++){
     const {x,y} = coords[i];
     ctx.beginPath();
@@ -119,12 +173,14 @@ function analyze(matrix){
 document.getElementById('runBtn').addEventListener('click', ()=>{
   const txt = document.getElementById('matrixInput').value;
   const out = document.getElementById('output');
+  const graphType = document.querySelector('input[name="gtype"]:checked').value;
+
   try {
-    const M = parseMatrix(txt);
+    const M = parseMatrix(txt, graphType);
     out.textContent = analyze(M);
-    drawGraph(M, 'graphCanvas');
+    drawGraph(M, 'graphCanvas', graphType);
   } catch(e){
-    out.textContent = "⚠️ Помилка: " + e.message;
+    out.textContent = "Помилка: " + e.message;
   }
 });
 
@@ -133,7 +189,9 @@ function pruferToEdges(code) {
   const prufer = code.map(Number);
   const n = prufer.length + 2;
   const degree = Array(n+1).fill(1);
+
   for (const v of prufer) degree[v]++;
+
   const edges = [];
   for (const v of prufer) {
     for (let i=1;i<=n;i++){
@@ -144,19 +202,24 @@ function pruferToEdges(code) {
       }
     }
   }
+
   const remaining = [];
   for (let i=1;i<=n;i++) if (degree[i]===1) remaining.push(i);
   edges.push(remaining);
+
   return edges;
 }
 
 function drawTree(edges, canvasId) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext('2d');
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
   const n = new Set(edges.flat()).size;
   const cx = canvas.width/2, cy = canvas.height/2;
   const R = Math.min(canvas.width,canvas.height)/2 - 60;
+
   const coords = [];
   for (let i=0;i<n;i++){
     const a = 2*Math.PI*i/n - Math.PI/2;
@@ -165,6 +228,7 @@ function drawTree(edges, canvasId) {
 
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#444";
+
   edges.forEach(([u,v])=>{
     ctx.beginPath();
     ctx.moveTo(coords[u-1].x, coords[u-1].y);
@@ -190,13 +254,14 @@ function drawTree(edges, canvasId) {
 document.getElementById('pruferBtn').addEventListener('click', ()=>{
   const txt = document.getElementById('pruferInput').value.trim();
   const out = document.getElementById('pruferOut');
+
   try {
     const code = txt.split(/\s+/).map(Number).filter(x=>!isNaN(x));
     const edges = pruferToEdges(code);
     out.textContent = "Отримані ребра: " + edges.map(e=>`(${e[0]}-${e[1]})`).join(", ");
     drawTree(edges, 'pruferCanvas');
   } catch(e){
-    out.textContent = "⚠️ Помилка: " + e.message;
+    out.textContent = "Помилка: " + e.message;
   }
 });
 </script>
